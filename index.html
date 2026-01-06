@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4338ca">
+    
+    <link rel="apple-touch-icon" href="https://play-lh.googleusercontent.com/BG5tOmSTlVRGeqq13K33iHwLBtAm0d9ezwuexowVso3iMLOfaJnVOWhGd91qP24Xmw">
+    <link rel="icon" href="https://play-lh.googleusercontent.com/BG5tOmSTlVRGeqq13K33iHwLBtAm0d9ezwuexowVso3iMLOfaJnVOWhGd91qP24Xmw"w>
+    <style>
+        /* This prevents the screen from 'bouncing' like a webpage */
+        body { position: fixed; width: 100%; height: 100%; overflow: hidden; }
+        #appContent { height: 100vh; display: flex; flex-direction: column; }
+    </style>
+</head>
+    <title>Lounil Lim CashBook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* This makes the page feel like an app (no scrolling the whole background) */
+        body { 
+            position: fixed; 
+            width: 100%; 
+            height: 100%; 
+            overscroll-behavior: none; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-slate-100">
+
+    <div id="lockScreen" class="fixed inset-0 bg-indigo-900 z-[100] flex flex-col items-center justify-center p-6">
+        <div class="text-center mb-8">
+            <div class="bg-white/10 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-4 text-5xl shadow-inner">🔒</div>
+            <h2 id="lockMessage" class="text-white text-xl font-bold tracking-tight">Enter PIN</h2>
+        </div>
+        <input type="password" id="pinInput" maxlength="4" inputmode="numeric" 
+               class="w-48 text-center text-4xl tracking-[0.8em] p-4 rounded-3xl border-none outline-none shadow-2xl mb-8" placeholder="••••">
+        <button onclick="checkPIN()" class="bg-white text-indigo-900 w-48 py-4 rounded-3xl font-black shadow-xl active:scale-95 transition-transform">UNLOCK</button>
+    </div>
+
+    <div id="appContent" class="hidden opacity-0 h-full flex flex-col transition-opacity duration-500">
+        <div class="bg-indigo-700 p-6 pt-12 text-white shadow-lg">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Available Balance</p>
+                    <h1 id="totalBalance" class="text-4xl font-black mt-1">₱0.00</h1>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="lockApp()" class="bg-white/20 p-2.5 rounded-2xl text-xl">🔒</button>
+                    <button onclick="toggleSettings()" class="bg-white/20 p-2.5 rounded-2xl text-xl">⚙️</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mt-8">
+                <div class="bg-white/10 p-4 rounded-2xl border border-white/5">
+                    <p class="text-[9px] uppercase font-bold opacity-60">This Month In</p>
+                    <p id="monthIn" class="text-lg font-bold text-emerald-300">₱0.00</p>
+                </div>
+                <div class="bg-white/10 p-4 rounded-2xl border border-white/5">
+                    <p class="text-[9px] uppercase font-bold opacity-60">This Month Out</p>
+                    <p id="monthOut" class="text-lg font-bold text-rose-300">₱0.00</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 no-scrollbar bg-slate-50">
+            <div id="inputForm" class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 mb-6 space-y-4">
+                <input type="hidden" id="editIndex" value="-1">
+                <input type="text" id="desc" placeholder="What is this for?" class="w-full border-b border-slate-200 py-2 outline-none text-sm focus:border-indigo-500 transition-colors">
+                <div class="flex gap-4">
+                    <input type="number" id="amount" placeholder="Amount" class="w-1/2 border-b border-slate-200 py-2 outline-none font-mono font-bold text-lg">
+                    <select id="catSelect" class="w-1/2 border-b border-slate-200 py-2 outline-none text-xs font-bold bg-transparent"></select>
+                </div>
+                <div id="actionButtons" class="flex gap-3 pt-2">
+                    <button onclick="saveEntry('income')" class="flex-1 bg-emerald-500 text-white py-3.5 rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all">+ INCOME</button>
+                    <button onclick="saveEntry('expense')" class="flex-1 bg-rose-500 text-white py-3.5 rounded-2xl font-black text-xs shadow-md active:scale-95 transition-all">- EXPENSE</button>
+                </div>
+                <div id="editButtons" class="hidden flex gap-2 pt-2">
+                    <button onclick="updateEntry()" class="flex-1 bg-indigo-600 text-white py-3 rounded-2xl font-bold text-xs">SAVE</button>
+                    <button onclick="cancelEdit()" class="flex-1 bg-slate-400 text-white py-3 rounded-2xl font-bold text-xs">BACK</button>
+                    <button onclick="deleteEntry()" class="bg-rose-100 text-rose-600 px-5 rounded-2xl">🗑️</button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="searchInput" onkeyup="renderUI()" placeholder="Search records..." class="flex-1 bg-white rounded-2xl px-4 py-3 text-xs outline-none shadow-sm border border-slate-100">
+                <button onclick="exportCSV()" class="bg-slate-800 text-white px-5 rounded-2xl text-[10px] font-bold shadow-md">EXPORT</button>
+            </div>
+
+            <ul id="historyList" class="space-y-3"></ul>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="hidden fixed inset-0 bg-slate-900/90 z-[110] flex items-center justify-center p-6 backdrop-blur-md">
+        <div class="bg-white rounded-[2.5rem] p-8 w-full max-w-sm flex flex-col max-h-[80vh]">
+            <h2 class="text-2xl font-black mb-6 text-slate-800">App Settings</h2>
+            
+            <div class="space-y-8 overflow-y-auto pr-1 no-scrollbar">
+                <div>
+                    <p class="text-[10px] font-black text-indigo-500 uppercase mb-3 tracking-widest">Privacy PIN</p>
+                    <div class="flex gap-2">
+                        <input type="password" id="newPin" maxlength="4" placeholder="New PIN" class="w-full bg-slate-50 p-3 rounded-xl border outline-none text-sm">
+                        <button onclick="changePIN()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold text-xs">UPDATE</button>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">My Categories</p>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="newCatInput" placeholder="Add custom..." class="flex-1 bg-slate-50 p-3 rounded-xl border outline-none text-sm">
+                        <button onclick="addCategory()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold">+</button>
+                    </div>
+                    <div id="catManagerList" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <button onclick="toggleSettings()" class="w-full bg-slate-900 text-white py-4 rounded-3xl font-black text-xs mt-8 shadow-xl">DONE</button>
+        </div>
+    </div>
+
+    <script>
+        // (Copy/Paste the script from our previous discussion here)
+        // I've included the logic again below to ensure the app is "Turnkey"
+        
+        let data = JSON.parse(localStorage.getItem('ph_cb_data')) || [];
+        let categories = JSON.parse(localStorage.getItem('ph_cb_cats')) || ['Food', 'Salary', 'Bills', 'Shopping'];
+        let currentPIN = localStorage.getItem('ph_cb_pin') || '1234';
+
+        function checkPIN() {
+            const input = document.getElementById('pinInput');
+            if(input.value === currentPIN) {
+                document.getElementById('lockScreen').classList.add('hidden');
+                const app = document.getElementById('appContent');
+                app.classList.remove('hidden');
+                setTimeout(() => app.classList.add('opacity-100'), 50);
+                input.value = '';
+                renderUI();
+            } else {
+                document.getElementById('lockMessage').innerText = "Wrong PIN!";
+                input.value = '';
+            }
+        }
+
+        function lockApp() {
+            document.getElementById('lockScreen').classList.remove('hidden');
+            document.getElementById('appContent').classList.add('hidden', 'opacity-0');
+        }
+
+        function renderUI() {
+            const list = document.getElementById('historyList');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            document.getElementById('catSelect').innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('catManagerList').innerHTML = categories.map((c, i) => `
+                <div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                    <span class="text-sm font-bold text-slate-700">${c}</span>
+                    <button onclick="deleteCategory(${i})" class="text-rose-400 font-bold px-2 text-xl">✕</button>
+                </div>`).join('');
+
+            const now = new Date();
+            const currMonth = now.toLocaleString('en-PH', { month: 'short', year: 'numeric' });
+            let balance = 0, mIn = 0, mOut = 0;
+
+            list.innerHTML = '';
+            data.forEach((item, index) => {
+                const amt = parseFloat(item.amount);
+                const isInc = item.type === 'income';
+                balance += isInc ? amt : -amt;
+                if(item.date.includes(currMonth)) isInc ? mIn += amt : mOut += amt;
+
+                if(item.desc.toLowerCase().includes(search)) {
+                    const li = document.createElement('li');
+                    li.className = "flex justify-between items-center p-4 bg-white border border-slate-100 rounded-3xl shadow-sm";
+                    li.innerHTML = `
+                        <div class="flex-1 truncate mr-4">
+                            <span class="text-[8px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-black uppercase">${item.category}</span>
+                            <p class="font-bold text-slate-800 text-sm truncate mt-1">${item.desc}</p>
+                            <p class="text-[9px] text-slate-400 font-medium">${item.date}</p>
+                        </div>
+                        <div class="flex items-center gap-3 text-right">
+                            <span class="font-mono font-black text-sm ${isInc ? 'text-emerald-500' : 'text-rose-500'}">₱${amt.toLocaleString()}</span>
+                            <button onclick="editMode(${index})" class="opacity-20 hover:opacity-100">✏️</button>
+                        </div>`;
+                    list.appendChild(li);
+                }
+            });
+
+            document.getElementById('totalBalance').innerText = `₱${balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('monthIn').innerText = `₱${mIn.toLocaleString()}`;
+            document.getElementById('monthOut').innerText = `₱${mOut.toLocaleString()}`;
+            localStorage.setItem('ph_cb_data', JSON.stringify(data));
+            localStorage.setItem('ph_cb_cats', JSON.stringify(categories));
+        }
+
+        function saveEntry(type) {
+            const desc = document.getElementById('desc').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const category = document.getElementById('catSelect').value;
+            if(desc && !isNaN(amount)) {
+                const date = new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                data.unshift({ desc, amount, type, category, date });
+                resetForm(); renderUI();
+            }
+        }
+
+        function editMode(i) {
+            const item = data[i];
+            document.getElementById('editIndex').value = i;
+            document.getElementById('desc').value = item.desc;
+            document.getElementById('amount').value = item.amount;
+            document.getElementById('catSelect').value = item.category;
+            document.getElementById('actionButtons').classList.add('hidden');
+            document.getElementById('editButtons').classList.remove('hidden');
+        }
+
+        function updateEntry() {
+            const i = document.getElementById('editIndex').value;
+            Object.assign(data[i], { desc: document.getElementById('desc').value, amount: parseFloat(document.getElementById('amount').value), category: document.getElementById('catSelect').value });
+            cancelEdit(); renderUI();
+        }
+
+        function deleteEntry() { if(confirm("Delete?")) { data.splice(document.getElementById('editIndex').value, 1); cancelEdit(); renderUI(); } }
+        function cancelEdit() { resetForm(); document.getElementById('actionButtons').classList.remove('hidden'); document.getElementById('editButtons').classList.add('hidden'); }
+        function resetForm() { document.getElementById('desc').value = ''; document.getElementById('amount').value = ''; document.getElementById('editIndex').value = '-1'; }
+        function toggleSettings() { document.getElementById('settingsModal').classList.toggle('hidden'); }
+        function addCategory() { const input = document.getElementById('newCatInput'); if(input.value) { categories.push(input.value); input.value = ''; renderUI(); } }
+        function deleteCategory(i) { categories.splice(i, 1); renderUI(); }
+        function changePIN() { const newPin = document.getElementById('newPin').value; if(newPin.length === 4) { currentPIN = newPin; localStorage.setItem('ph_cb_pin', newPin); alert("PIN Changed!"); } }
+        function exportCSV() {
+            let csv = "Date,Description,Category,Type,Amount\n";
+            data.forEach(t => csv += `"${t.date}","${t.desc}","${t.category}","${t.type}","${t.type === 'expense' ? '-' : ''}${t.amount}"\n`);
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `CashBook.csv`; a.click();
+        }
+    </script>
+</body>
+</html>
