@@ -8,10 +8,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#4338ca">
     
-    <link rel="apple-touch-icon" href="https://play-lh.googleusercontent.com/BG5tOmSTlVRGeqq13K33iHwLBtAm0d9ezwuexowVso3iMLOfaJnVOWhGd91qP24Xmw">
-    <link rel="icon" href="https://play-lh.googleusercontent.com/BG5tOmSTlVRGeqq13K33iHwLBtAm0d9ezwuexowVso3iMLOfaJnVOWhGd91qP24Xmw">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2454/2454282.png">
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2454/2454282.png">
 
-    <title>Lounil Lim CashBook</title>
+    <title>PH CashBook Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { 
@@ -155,3 +155,144 @@
         function renderUI() {
             const list = document.getElementById('historyList');
             const search = document.getElementById('searchInput').value.toLowerCase();
+            document.getElementById('catSelect').innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('catManagerList').innerHTML = categories.map((c, i) => `
+                <div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                    <span class="text-sm font-bold text-slate-700">${c}</span>
+                    <button onclick="deleteCategory(${i})" class="text-rose-400 font-bold px-2">✕</button>
+                </div>`).join('');
+
+            const now = new Date();
+            const currMonth = now.toLocaleString('en-PH', { month: 'short', year: 'numeric' });
+            let balance = 0, mIn = 0, mOut = 0;
+
+            list.innerHTML = '';
+            data.forEach((item, index) => {
+                const amt = parseFloat(item.amount);
+                const isInc = item.type === 'income';
+                balance += isInc ? amt : -amt;
+                if(item.date.includes(currMonth)) isInc ? mIn += amt : mOut += amt;
+
+                if(item.desc.toLowerCase().includes(search)) {
+                    const li = document.createElement('li');
+                    li.className = "flex justify-between items-center p-4 bg-white border border-slate-100 rounded-3xl shadow-sm";
+                    li.innerHTML = `
+                        <div class="flex-1 truncate mr-4">
+                            <span class="text-[8px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-black uppercase">${item.category}</span>
+                            <p class="font-bold text-slate-800 text-sm truncate mt-1">${item.desc}</p>
+                            <p class="text-[9px] text-slate-400 font-medium">${item.date}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono font-black text-sm ${isInc ? 'text-emerald-500' : 'text-rose-500'}">₱${amt.toLocaleString()}</span>
+                            <button onclick="editMode(${index})" class="opacity-20 hover:opacity-100">✏️</button>
+                        </div>`;
+                    list.appendChild(li);
+                }
+            });
+
+            document.getElementById('totalBalance').innerText = `₱${balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('monthIn').innerText = `₱${mIn.toLocaleString()}`;
+            document.getElementById('monthOut').innerText = `₱${mOut.toLocaleString()}`;
+            localStorage.setItem('ph_cb_data', JSON.stringify(data));
+            localStorage.setItem('ph_cb_cats', JSON.stringify(categories));
+        }
+
+        // --- Backup & Restore Logic ---
+        function downloadBackup() {
+            const backupData = {
+                transactions: data,
+                categories: categories,
+                pin: currentPIN,
+                date: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `CashBook_Backup_${dateStr}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function restoreBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported.transactions && imported.categories) {
+                        if(confirm("Restore this backup? All current device records will be replaced.")) {
+                            data = imported.transactions;
+                            categories = imported.categories;
+                            currentPIN = imported.pin || currentPIN;
+                            localStorage.setItem('ph_cb_data', JSON.stringify(data));
+                            localStorage.setItem('ph_cb_cats', JSON.stringify(categories));
+                            localStorage.setItem('ph_cb_pin', currentPIN);
+                            alert("Data Restored!"); location.reload();
+                        }
+                    }
+                } catch (err) { alert("Invalid backup file."); }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- Reporting & Export ---
+        function exportCSV() {
+            let csv = "Date,Description,Category,Type,Amount,Running Balance\n";
+            let runningBal = 0;
+            let exportData = [...data].reverse();
+            let rows = exportData.map(t => {
+                const amt = parseFloat(t.amount);
+                t.type === 'income' ? runningBal += amt : runningBal -= amt;
+                return `"${t.date}","${t.desc}","${t.category}","${t.type}","${t.type === 'expense' ? '-' : ''}${amt}","${runningBal.toFixed(2)}"`;
+            });
+            csv += rows.reverse().join("\n");
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().split('T')[0];
+            a.href = URL.createObjectURL(blob);
+            a.download = `CashBook_Report_${dateStr}.csv`;
+            a.click();
+        }
+
+        // --- Entry Management ---
+        function saveEntry(type) {
+            const desc = document.getElementById('desc').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const category = document.getElementById('catSelect').value;
+            if(desc && !isNaN(amount)) {
+                const date = new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                data.unshift({ desc, amount, type, category, date });
+                resetForm(); renderUI();
+            }
+        }
+        function editMode(i) {
+            const item = data[i];
+            document.getElementById('editIndex').value = i;
+            document.getElementById('desc').value = item.desc;
+            document.getElementById('amount').value = item.amount;
+            document.getElementById('catSelect').value = item.category;
+            document.getElementById('actionButtons').classList.add('hidden');
+            document.getElementById('editButtons').classList.remove('hidden');
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+        function updateEntry() {
+            const i = document.getElementById('editIndex').value;
+            Object.assign(data[i], { desc: document.getElementById('desc').value, amount: parseFloat(document.getElementById('amount').value), category: document.getElementById('catSelect').value });
+            cancelEdit(); renderUI();
+        }
+        function cancelEdit() { resetForm(); document.getElementById('actionButtons').classList.remove('hidden'); document.getElementById('editButtons').classList.add('hidden'); }
+        function resetForm() { document.getElementById('desc').value = ''; document.getElementById('amount').value = ''; document.getElementById('editIndex').value = '-1'; }
+        function deleteEntry() { if(confirm("Permanently delete this?")) { data.splice(document.getElementById('editIndex').value, 1); cancelEdit(); renderUI(); } }
+        function toggleSettings() { document.getElementById('settingsModal').classList.toggle('hidden'); }
+        function addCategory() { const input = document.getElementById('newCatInput'); if(input.value) { categories.push(input.value); input.value = ''; renderUI(); } }
+        function deleteCategory(i) { if(confirm("Remove this category option?")) { categories.splice(i, 1); renderUI(); } }
+        function changePIN() { const newPin = document.getElementById('newPin').value; if(newPin.length === 4) { currentPIN = newPin; localStorage.setItem('ph_cb_pin', newPin); alert("New PIN Saved!"); } else { alert("PIN must be 4 digits."); } }
+
+        // Initial Load
+        renderUI();
+    </script>
+</body>
+</html>
