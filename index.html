@@ -269,11 +269,25 @@
         function deleteCategory(i) { categories.splice(i, 1); renderUI(); }
         function changePIN() { const newPin = document.getElementById('newPin').value; if(newPin.length === 4) { currentPIN = newPin; localStorage.setItem('ph_cb_pin', newPin); alert("PIN Updated!"); } }
         function exportCSV() {
-            let csv = "Date,Description,Category,Type,Amount\n";
-            data.forEach(t => csv += `"${t.date}","${t.desc}","${t.category}","${t.type}","${t.type === 'expense' ? '-' : ''}${t.amount}"\n`);
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `CashBook.csv`; a.click();
+            let csv = "Date,Description,Category,Type,Amount,Running Balance\n";
+            let runningBal = 0;
+            let exportData = [...data].reverse();
+            let rows = exportData.map(t => {
+        const amt = parseFloat(t.amount);
+        if (t.type === 'income') {
+            runningBal += amt;
+        } else {
+            runningBal -= amt;
         }
+                return `"${t.date}","${t.desc}","${t.category}","${t.type}","${t.type === 'expense' ? '-' : ''}${amt}","${runningBal.toFixed(2)}"`;
+    });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = URL.createObjectURL(blob);
+    a.download = `CashBook_Full_Report_${dateStr}.csv`;
+    a.click();
+}
     </script>
 </body>
 </html>
