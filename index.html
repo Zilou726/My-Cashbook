@@ -172,7 +172,7 @@
 
         let data = [];
         let categories = ['Food', 'Salary', 'Bills', 'Others'];
-        let currentPIN = '1234'; // Default until loaded from cloud
+        let currentPIN = '1234';
 
         // Fetch PIN from Cloud for this specific book
         db.ref(`cashbooks/${currentBook}/settings/pin`).on('value', (snapshot) => {
@@ -180,7 +180,6 @@
             if (val) {
                 currentPIN = val;
             } else {
-                // Initialize default PIN in cloud if not exists
                 db.ref(`cashbooks/${currentBook}/settings/pin`).set('1234');
             }
         });
@@ -234,7 +233,9 @@
                 </div>`).join('');
 
             const now = new Date();
-            const currMonth = now.toLocaleString('en-PH', { month: 'short', year: 'numeric' });
+            const currMonthName = now.toLocaleString('en-US', { month: 'short' }); // e.g. "Oct"
+            const currYearNum = now.getFullYear().toString(); // e.g. "2026"
+
             let balance = 0, mIn = 0, mOut = 0;
 
             list.innerHTML = '';
@@ -242,7 +243,11 @@
                 const amt = parseFloat(item.amount);
                 const isInc = item.type === 'income';
                 balance += isInc ? amt : -amt;
-                if(item.date && item.date.includes(currMonth)) isInc ? mIn += amt : mOut += amt;
+
+                // Flexible current month & year check
+                if(item.date && item.date.includes(currMonthName) && item.date.includes(currYearNum)) {
+                    isInc ? mIn += amt : mOut += amt;
+                }
 
                 if(item.desc && item.desc.toLowerCase().includes(search)) {
                     const li = document.createElement('li');
@@ -254,7 +259,7 @@
                             <p class="text-[9px] text-slate-400 font-medium">${item.date}</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <span class="font-mono font-black text-sm ${isInc ? 'text-emerald-500' : 'text-rose-500'}">₱${amt.toLocaleString()}</span>
+                            <span class="font-mono font-black text-sm ${isInc ? 'text-emerald-500' : 'text-rose-500'}">${isInc ? '+' : '-'}₱${amt.toLocaleString()}</span>
                             <button onclick="editMode(${index})" class="opacity-20 hover:opacity-100">✏️</button>
                         </div>`;
                     list.appendChild(li);
@@ -262,8 +267,8 @@
             });
 
             document.getElementById('totalBalance').innerText = `₱${balance.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-            document.getElementById('monthIn').innerText = `₱${mIn.toLocaleString()}`;
-            document.getElementById('monthOut').innerText = `₱${mOut.toLocaleString()}`;
+            document.getElementById('monthIn').innerText = `₱${mIn.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('monthOut').innerText = `₱${mOut.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
         }
 
         function saveEntry(type) {
@@ -271,12 +276,11 @@
             const amount = parseFloat(document.getElementById('amount').value);
             const category = document.getElementById('catSelect').value;
             if(desc && !isNaN(amount)) {
-                const date = new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const date = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 
                 const newRef = db.ref(`cashbooks/${currentBook}/transactions`).push();
                 newRef.set({ desc, amount, type, category, date }).then(() => {
                     resetForm();
-                    alert("Entry saved and synced live!");
                 }).catch((err) => {
                     alert("Failed to save: " + err.message);
                 });
@@ -310,7 +314,6 @@
                             category: document.getElementById('catSelect').value
                         });
                         cancelEdit();
-                        alert("Entry updated live!");
                     }
                 }
             });
