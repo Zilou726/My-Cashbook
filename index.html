@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2454/2454282.png">
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2454/2454282.png">
 
-    <title>PH CashBook Live Sync</title>
+    <title id="appTitle">PH CashBook Live Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Firebase App & Realtime Database SDKs -->
@@ -35,6 +35,7 @@
         <div class="text-center mb-8">
             <div class="bg-white/10 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-4 text-5xl shadow-inner">🔒</div>
             <h2 id="lockMessage" class="text-white text-xl font-bold tracking-tight">Enter PIN</h2>
+            <p id="currentBookLabel" class="text-indigo-200 text-xs mt-2 uppercase tracking-widest font-semibold"></p>
         </div>
         <input type="password" id="pinInput" maxlength="4" inputmode="numeric" 
                class="w-48 text-center text-4xl tracking-[0.8em] p-4 rounded-3xl border-none outline-none shadow-2xl mb-8" placeholder="••••">
@@ -47,7 +48,7 @@
         <div class="bg-indigo-700 p-6 pt-12 text-white shadow-lg shrink-0">
             <div class="flex justify-between items-start">
                 <div>
-                    <p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Available Balance (Live)</p>
+                    <span id="bookBadge" class="text-[9px] bg-white/20 px-2.5 py-0.5 rounded-full uppercase font-bold tracking-wider">Book</span>
                     <h1 id="totalBalance" class="text-4xl font-black mt-1">₱0.00</h1>
                 </div>
                 <div class="flex gap-2">
@@ -104,16 +105,25 @@
             <h2 class="text-2xl font-black mb-6 text-slate-800">App Settings</h2>
             
             <div class="space-y-6 overflow-y-auto pr-1 no-scrollbar">
+                <!-- Switch / Create Different Cashbook -->
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Switch / Create Cashbook</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="bookInput" placeholder="e.g. store2, rentals" class="w-full bg-slate-50 p-3 rounded-xl border outline-none text-sm font-bold text-slate-700">
+                        <button onclick="switchBook()" class="bg-indigo-600 text-white px-4 rounded-xl font-bold text-xs">SWITCH</button>
+                    </div>
+                </div>
+
                 <!-- Share Link Box -->
                 <div class="bg-emerald-50 p-5 rounded-3xl border border-emerald-100">
-                    <p class="text-[10px] font-black text-emerald-600 uppercase mb-2 tracking-widest text-center">Share Entry Link</p>
-                    <p class="text-[10px] text-slate-500 text-center mb-3">Anyone with this link can open the app and add entries that sync automatically to your dashboard.</p>
+                    <p class="text-[10px] font-black text-emerald-600 uppercase mb-2 tracking-widest text-center">Share This Book Link</p>
+                    <p class="text-[10px] text-slate-500 text-center mb-3">Sends a dedicated link for the current cashbook with its own entries and synced PIN.</p>
                     <button onclick="shareAppURL()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs shadow-sm">🔗 COPY / SHARE LINK</button>
                 </div>
 
                 <!-- PIN Privacy -->
                 <div>
-                    <p class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Privacy PIN</p>
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Privacy PIN (Synced)</p>
                     <div class="flex gap-2">
                         <input type="password" id="newPin" maxlength="4" placeholder="New PIN" class="w-full bg-slate-50 p-3 rounded-xl border outline-none text-sm">
                         <button onclick="changePIN()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold text-xs">SET</button>
@@ -139,7 +149,7 @@
         const firebaseConfig = {
             apiKey: "AIzaSyCEsPpkdAo0SYY1_xeOTzOQe5TSh-7NBVE",
             authDomain: "lal-bh.firebaseapp.com",
-            databaseURL: "https://lal-bh-default-rtdb.asia-southeast1.firebasedatabase.app", // Explicit Database URL Added
+            databaseURL: "https://lal-bh-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "lal-bh",
             storageBucket: "lal-bh.firebasestorage.app",
             messagingSenderId: "895505763834",
@@ -151,24 +161,44 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Parse book name from URL parameter ?book=name (defaults to 'main')
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentBook = urlParams.get('book') ? urlParams.get('book').toLowerCase().replace(/[^a-z0-9_]/g, '') : 'main';
+
+        document.getElementById('bookBadge').innerText = `Book: ${currentBook}`;
+        document.getElementById('appTitle').innerText = `PH CashBook - ${currentBook}`;
+        document.getElementById('currentBookLabel').innerText = `Cashbook: ${currentBook}`;
+        document.getElementById('bookInput').value = currentBook;
+
         let data = [];
         let categories = ['Food', 'Salary', 'Bills', 'Others'];
-        let currentPIN = localStorage.getItem('ph_cb_pin') || '1234';
+        let currentPIN = '1234'; // Default until loaded from cloud
 
-        // Real-Time Listeners from Firebase Cloud
-        db.ref('cashbook/transactions').on('value', (snapshot) => {
+        // Fetch PIN from Cloud for this specific book
+        db.ref(`cashbooks/${currentBook}/settings/pin`).on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                currentPIN = val;
+            } else {
+                // Initialize default PIN in cloud if not exists
+                db.ref(`cashbooks/${currentBook}/settings/pin`).set('1234');
+            }
+        });
+
+        // Real-Time Listeners for Transactions & Categories under current book
+        db.ref(`cashbooks/${currentBook}/transactions`).on('value', (snapshot) => {
             const val = snapshot.val();
             data = val ? Object.values(val) : [];
             renderUI();
-        }, (error) => {
-            console.error("Firebase read error:", error);
         });
 
-        db.ref('cashbook/categories').on('value', (snapshot) => {
+        db.ref(`cashbooks/${currentBook}/categories`).on('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {
                 categories = val;
                 renderUI();
+            } else {
+                db.ref(`cashbooks/${currentBook}/categories`).set(categories);
             }
         });
 
@@ -243,7 +273,7 @@
             if(desc && !isNaN(amount)) {
                 const date = new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 
-                const newRef = db.ref('cashbook/transactions').push();
+                const newRef = db.ref(`cashbooks/${currentBook}/transactions`).push();
                 newRef.set({ desc, amount, type, category, date }).then(() => {
                     resetForm();
                     alert("Entry saved and synced live!");
@@ -268,13 +298,13 @@
 
         function updateEntry() {
             const i = document.getElementById('editIndex').value;
-            db.ref('cashbook/transactions').once('value', (snapshot) => {
+            db.ref(`cashbooks/${currentBook}/transactions`).once('value', (snapshot) => {
                 const val = snapshot.val();
                 if(val) {
                     const keys = Object.keys(val);
                     const targetKey = keys[i];
                     if(targetKey) {
-                        db.ref('cashbook/transactions/' + targetKey).update({
+                        db.ref(`cashbooks/${currentBook}/transactions/` + targetKey).update({
                             desc: document.getElementById('desc').value,
                             amount: parseFloat(document.getElementById('amount').value),
                             category: document.getElementById('catSelect').value
@@ -289,13 +319,13 @@
         function deleteEntry() {
             if(confirm("Permanently delete this entry?")) {
                 const i = document.getElementById('editIndex').value;
-                db.ref('cashbook/transactions').once('value', (snapshot) => {
+                db.ref(`cashbooks/${currentBook}/transactions`).once('value', (snapshot) => {
                     const val = snapshot.val();
                     if(val) {
                         const keys = Object.keys(val);
                         const targetKey = keys[i];
                         if(targetKey) {
-                            db.ref('cashbook/transactions/' + targetKey).remove();
+                            db.ref(`cashbooks/${currentBook}/transactions/` + targetKey).remove();
                             cancelEdit();
                         }
                     }
@@ -312,7 +342,7 @@
             const input = document.getElementById('newCatInput'); 
             if(input.value) { 
                 categories.push(input.value); 
-                db.ref('cashbook/categories').set(categories);
+                db.ref(`cashbooks/${currentBook}/categories`).set(categories);
                 input.value = ''; 
             } 
         }
@@ -320,7 +350,7 @@
         function deleteCategory(i) { 
             if(confirm("Remove this category?")) { 
                 categories.splice(i, 1); 
-                db.ref('cashbook/categories').set(categories);
+                db.ref(`cashbooks/${currentBook}/categories`).set(categories);
             } 
         }
 
@@ -328,24 +358,36 @@
             const newPin = document.getElementById('newPin').value; 
             if(newPin.length === 4) { 
                 currentPIN = newPin; 
-                localStorage.setItem('ph_cb_pin', newPin); 
-                alert("New PIN Saved!"); 
+                db.ref(`cashbooks/${currentBook}/settings/pin`).set(newPin).then(() => {
+                    alert("New PIN synced and saved for this book!");
+                    document.getElementById('newPin').value = '';
+                });
             } else { 
                 alert("PIN must be 4 digits."); 
             } 
+        }
+
+        function switchBook() {
+            const bookName = document.getElementById('bookInput').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+            if(bookName) {
+                const baseUrl = window.location.href.split('?')[0];
+                window.location.href = `${baseUrl}?book=${bookName}`;
+            } else {
+                alert("Please enter a valid cashbook name.");
+            }
         }
 
         function shareAppURL() {
             const currentURL = window.location.href;
             if (navigator.share) {
                 navigator.share({
-                    title: 'PH CashBook Entry',
-                    text: 'Add your cash entries here:',
+                    title: `PH CashBook - ${currentBook}`,
+                    text: `Add entries for ${currentBook} here:`,
                     url: currentURL,
                 }).catch(() => {});
             } else {
                 navigator.clipboard.writeText(currentURL);
-                alert("App link copied to clipboard! Send this link to anyone who needs to make entries.");
+                alert(`Link copied for "${currentBook}"! Send this link to your personnel.`);
             }
         }
 
@@ -363,7 +405,7 @@
             const a = document.createElement('a');
             const dateStr = new Date().toISOString().split('T')[0];
             a.href = URL.createObjectURL(blob);
-            a.download = `CashBook_Live_Report_${dateStr}.csv`;
+            a.download = `CashBook_${currentBook}_Report_${dateStr}.csv`;
             a.click();
         }
     </script>
